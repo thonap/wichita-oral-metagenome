@@ -1,0 +1,45 @@
+## QIIME1 commands for OTU-picking and SourceTracker analysis 
+## Written by Tanvi Honap
+
+############################################
+## Modify before running ## 
+
+## The input is the FASTA file called All_samples_16S.fa which contains those reads mapping to the GreenGenes database of 16S rRNA gene sequences across all your samples. 
+
+path=/path/to/folder/containing/input/file
+
+############################################
+
+$ source activate qiime1
+
+$ pick_closed_reference_otus.py -o $path/otus/ -i $path/All_samples_16S.fa -p $path/QIIME_parameters.txt -a -O 12
+
+$ biom summarize-table -i $path/otus/otu_table.biom -o $path/otus/Biom_summary.txt  
+
+### Rarefy to appropriate read depth based on Biom_summary.txt
+### Depth of rarefaction should be at least 500
+
+$ single_rarefaction.py -i $path/otus/otu_table.biom -o $path/otus/otu_table_500.biom -d 500
+
+## SourceTracker
+
+## Merge the source and sink mapping Files
+$ merge_mapping_files.py -m $path/Sink_Mapping_File.txt,Sources_MappingFile.txt -o $path/Merged_MappingFile.txt
+
+## Rarefy sources to same read depth as sink samples
+$ single_rarefaction.py -i $path/Sources.biom -o $path/Sources_500.biom -d 500
+
+## Merge the source and sink BIOM files
+## merge_otu_tables.py -i $path/otus/otu_table_500.biom,$path/Sources_500.biom -o $path/Merged_500.biom
+
+## Generate a genus level biom file
+$ summarize_taxa.py -i $path/Merged_500.biom -L 6 -o Merged_500_Genus/ -a
+
+## This will generate a folder called Merged_500_Genus which contains a Merged_500_L6.txt file with the abundances of each OTU.
+## Open this file in text editor and 1) remove the first line and 2) Change #OTU ID to Taxon
+## SourceTracker may not run properly otherwise
+
+$ Rscript '/path/to/SourceTracker/sourcetracker_for_qiime.r' -t $path/Merged_500_Genus/Merged_500_L6.txt -m $path/Merged_MappingFile.txt -o $path/Sourcetracker_Genus -r 0 --train_rarefaction 0 
+
+## This will generate a folder called Sourcetracker_Genus which will have the results. 
+
