@@ -1,0 +1,64 @@
+## Workflow for SNP-based phylogenomic analysis of microbes
+## Written by Tanvi Honap
+
+############################################
+## Modify before running ## 
+
+## Set path
+path=/path/to/folder/containing/VCF/files
+
+## Set an output suffix which will be added to every output file 
+out=microbe1
+
+############################################
+
+## Merge all VCF files together 
+## This will include ALL samples that you want to include in the phylogeny
+## Generate vcf.gz and tabix files for all VCF files
+
+for i in $path/*.vcf; 
+ do
+  bgzip -c $i > $i.gz
+  tabix -p vcf $i.gz
+  echo $i.gz >> SampleVCFList.txt
+ done
+
+## SampleVCFList.txt will have the list of vcf.gz files to be merged. 
+
+## Merge using bcftools
+bcftools merge -m both -O z -l SampleVCFList.txt -o Merged.$out.raw.vcf.gz 
+tabix -p vcf Merged.$out.raw.vcf.gz
+
+## Filter for only biallelic SNPs
+bcftools view -v snps -m2 -M2 -O v -o Merged.$out.snps.vcf Merged.$out.raw.vcf.gz
+
+## SNP-filtering using vcftools
+## Remove SNPs in regions to be excluded (given in a BED file format)
+## Remove positions with less than 90% coverage
+
+vcftools --vcf Merged.$out.snps.vcf --exclude-bed Microbe1_regions_to_exclude.bed --max-missing 0.9 --recode --recode-INFO-all --out Merged.$out.snps.filtered.mm90
+
+bgzip -c Merged.$out.snps.filtered.mm90.recode.vcf > Merged.$out.snps.filtered.mm90.recode.vcf.gz
+
+tabix -p vcf Merged.$out.snps.filtered.mm90.recode.vcf.gz
+
+## Convert the VCF file to a tab-delimited file
+
+zcat Merged.$out.snps.filtered.mm90.recode.vcf.gz | vcf-to-tab > Merged.$out.snps.filtered.mm90.tab
+
+## Change ./. missing data calls to N/N
+sed -i 's/\.\/\./N\/N/g' Merged.$out.snps.filtered.mm90.tab
+
+## Get multi-fasta file from tab-delimited file
+## This will be your final SNP alignment
+## Exclude heterozygous sites
+## You can also tell the program to output the reference genome to use in the phylogeny
+
+perl vcf_tab_to_fasta_alignment.pl --exclude_het --output_ref -i Merged.$out.snps.filtered.mm90.tab > Merged.$out.snps.filtered.mm90.noHets.fasta
+
+## vcf_tab_to_fasta_alignment.pl script is available from CM Bergey at https://code.google.com/archive/p/vcf-tab-to-fasta/
+
+## The Merged.$out.snps.filtered.mm90.noHets.fasta file can be used as input for phylogenetic tree building using IQTREE, RAxML, or MEGA (or whatever program desired).
+
+## End ##
+
